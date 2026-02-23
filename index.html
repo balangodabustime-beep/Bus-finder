@@ -1,0 +1,816 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Bus Time — Bus-time.html</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="theme-color" content="#0066cc">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Bus Time">
+  <meta name="description" content="Offline Bus Schedule Prototype for Balangoda">
+  
+  <!-- Leaflet -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <!-- Font Awesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"/>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/png" href="icon.png">
+  <link rel="apple-touch-icon" href="icon.png">
+  
+  <style>
+
+    :root{
+      --accent:#0066cc;
+      --bg:#0f1724;
+      --card:#0b1220;
+      --muted:#9aa4b2;
+      --glass: rgba(255,255,255,0.03);
+      --success: #10b981;
+      --danger: #ef4444;
+      --transition: 300ms cubic-bezier(.22,.9,.3,1);
+      --radius: 12px;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%;margin:0;background:linear-gradient(180deg,#071122 0%, #071930 60%);font-family:Inter,system-ui,Segoe UI,Roboto, "Helvetica Neue", Arial;color:#e6eef8}
+    .app{
+      display:flex;flex-direction:column;height:100vh;overflow:hidden;
+    }
+    header.app-header{
+
+      display:flex;align-items:center;gap:12px;padding:12px 16px;background:linear-gradient(90deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));backdrop-filter: blur(4px);
+      box-shadow: 0 1px 0 rgba(255,255,255,0.02);
+      z-index:60;
+    }
+    .hamburger{
+      width:46px;height:38px;border-radius:10px;background:var(--glass);display:flex;align-items:center;justify-content:center;cursor:pointer;
+      transition:transform var(--transition),background var(--transition);
+    }
+    .hamburger:active{transform:scale(.98)}
+    .title{font-weight:600;font-size:1.05rem}
+    .spacer{flex:1}
+    .controls{display:flex;gap:8px;align-items:center}
+    .btn{
+
+      background:linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.02));border:0;padding:8px 12px;border-radius:10px;color:var(--muted);cursor:pointer;display:inline-flex;gap:8px;align-items:center;
+      transition:all var(--transition);
+    }
+    .btn.primary{background:linear-gradient(90deg,var(--accent),#005bb5);color:white}
+    .main{
+      display:flex;flex:1;overflow:hidden;
+    }
+    /* Side menu (off-canvas) */
+    .overlay{
+      position:fixed;inset:0;background:rgba(0,0,0,0.45);opacity:0;pointer-events:none;transition:opacity var(--transition);z-index:70;
+    }
+    .overlay.show{opacity:1;pointer-events:auto}
+    .side{position:fixed;left:12px;top:72px;width:360px;max-width:92%;height:calc(100vh - 96px);background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));border-radius:16px;padding:14px;box-shadow:0 10px 30px rgba(0,0,0,0.6);transform:translateY(-12px) scale(.98);opacity:0;pointer-events:none;transition:all 420ms cubic-bezier(.2,.9,.25,1);z-index:80;backdrop-filter: blur(6px)
+    }
+    .side.show{transform:translateY(0) scale(1);opacity:1;pointer-events:auto}
+    .side h3{margin:6px 0 12px 0}
+    .section{background:rgba(255,255,255,0.02);padding:12px;border-radius:12px;margin-bottom:12px}
+    .row{display:flex;gap:8px;align-items:center}
+    label{font-size:.85rem;color:var(--muted);display:block;margin-bottom:6px}
+    select,input[type="time"]{width:100%;padding:8px;border-radius:8px;border:0;background:rgb(15, 31, 53);color:inherit}
+    .map-wrap{flex:1;position:relative;min-width:300px}
+    #map{position:absolute;inset:0}
+    .right-panel{width:420px;max-width:42%;background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));padding:12px;border-left:1px solid rgba(255,255,255,0.02);overflow:auto;transition:width var(--transition)}
+    .panel-section{margin-bottom:12px}
+    .card{ background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+      border-radius:14px;padding:12px;box-shadow:0 6px 18px rgba(2,6,23,0.6);transition:all var(--transition)
+    }
+    .bus-card{position:relative;padding:18px;border-radius:14px;overflow:hidden}
+
+    .service-pill{position:absolute;right:12px;top:12px;padding:6px 10px;border-radius:999px;font-weight:700}
+    .service-pill.sltb{background:var(--danger);color:white}
+    .service-pill.private{background:var(--success);color:#062717}
+    .bus-title{font-weight:700;font-size:1.1rem}
+    .bus-time{font-size:2rem;font-weight:700;margin:6px 0}
+    .bus-sub{color:var(--muted);font-size:.9rem}
+    .nav-btns{display:flex;gap:8px;margin-top:12px}
+    .small{font-size:.85rem;padding:6px 10px;border-radius:10px}
+    .details{margin-top:10px;color:var(--muted);font-size:.9rem}
+    .sim-card{margin-top:12px}
+    .map-buttons{position:absolute;left:12px;bottom:12px;display:flex;flex-direction:column;gap:8px;z-index:60}
+    .map-buttons button{width:44px;height:44px;border-radius:10px;background:var(--glass);border:0;color:var(--muted);display:flex;align-items:center;justify-content:center;transition:all var(--transition)}
+    .map-buttons button.active{background:linear-gradient(90deg,var(--accent),#005bb5);color:white;transform:scale(1.04)}
+    /* Fullscreen styles */
+    .fullscreen header.app-header, .fullscreen .right-panel{display:none}
+    .fullscreen #map{position:fixed;top:0;left:0;right:0;bottom:0;height:100vh;z-index:40}
+    footer{height:44px;background:linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.02));display:flex;align-items:center;padding:6px 12px;gap:8px;color:var(--muted)}
+    .saved-list{max-height:150px;overflow:auto;margin-top:8px}
+    .saved-item{display:flex;justify-content:space-between;gap:8px;padding:8px;border-radius:8px;background:rgba(255,255,255,0.02);margin-bottom:8px}
+    /* Responsive */
+    @media (max-width:980px){
+      .right-panel { width: 55vw; max-width: 55vw;}
+    }
+    @media (max-width:600px){
+      
+      .map-wrap{display:none;}
+      .right-panel{width:100%;max-width:100%}
+      .map-buttons{display:none;}
+      .side{right:0px;top:64px;width:100%}
+    }
+    small.help{color:var(--muted)}
+  </style>
+</head>
+<body>
+  <div class="app" id="app">
+    <header class="app-header">
+      <div class="hamburger" id="hamburger" title="Open menu"><i class="fa fa-bars"></i></div>
+      <div class="title">Bus Time Balangoda</div>
+      <div class="spacer"></div>
+      <div class="controls">
+        <button class="btn" id="saveLocBtn" title="Save current from/to">Save</button>
+        
+        <button class="btn primary" id="findBtn"><i class="fa fa-search"></i> Find</button>
+      </div>
+    </header>
+
+    <div class="main">
+      <div class="map-wrap">
+        <div id="map"></div>
+
+        <div class="map-buttons">
+          <button id="setFromBtn" title="Set From"><i class="fa fa-location-dot"></i><small style="display:none">From</small></button>
+          <button id="setToBtn" title="Set To"><i class="fa fa-location-pin"></i><small style="display:none">To</small></button>
+          <button id="centerBtn" title="Center to Balangoda"><i class="fa fa-location-crosshairs"></i></button>
+        </div>
+      </div>
+
+
+      <aside class="right-panel" id="rightPanel">
+        <div class="panel-section">
+          <div class="card section">
+            <h3>Find Bus</h3>
+            <div style="display:flex;gap:8px">
+              <div style="flex:1">
+                <label>Route</label>
+                <select id="routeSelect"></select>
+              </div>
+              <div style="width:110px">
+                <label>Direction</label>
+                <select id="directionSelect"><option value="down">Down</option><option value="up">Up</option></select>
+              </div>
+            </div>
+
+            <div style="display:flex;gap:8px;margin-top:8px">
+              <div style="flex:1">
+                <label>From</label>
+                <select id="fromSelect"></select>
+              </div>
+
+              <div style="flex:1">
+                <label>To</label>
+                <select id="toSelect"></select>
+              </div>
+            </div>
+
+            <div style="display:flex;gap:8px;margin-top:8px;align-items:center">
+              <div style="flex:1">
+                <label>Time (optional)</label>
+                <input type="time" id="timeInput"/>
+                <small class="help">If empty uses present time</small>
+              </div>
+              <div>
+                <label>&nbsp;</label>
+                <button class="btn small" id="clearBtn">Clear</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel-section">
+          <div class="card bus-card" id="resultCard">
+            <div class="service-pill" id="servicePill" style="display:none"></div>
+            <div class="bus-title" id="resultTitle">No result yet</div>
+            <div class="bus-time" id="resultTime">--:--</div>
+            <div class="bus-sub" id="resultSub">Select route, from, to and time then click Find</div>
+            <div class="nav-btns">
+              <button class="btn small" id="prevBusBtn"><i class="fa fa-chevron-left"></i> Previous</button>
+              <button class="btn small" id="nextBusBtn">Next <i class="fa fa-chevron-right"></i></button>
+            </div>
+            <div class="details" id="otherDetails"></div>
+          </div>
+
+          <div class="card sim-card" id="simCard">
+            <h4>Bus Simulator</h4>
+            <div style="display:flex;gap:8px;align-items:center">
+              <input type="file" id="gpxFile" accept=".gpx"/>
+              <button class="btn small" id="loadGpxBtn">Load GPX</button>
+              <button class="btn small" id="startSimBtn">Start</button>
+              <button class="btn small" id="stopSimBtn">Stop</button>
+            </div>
+            <div style="margin-top:8px;font-size:.9rem;color:var(--muted)">
+              <div>Speed (km/h): <input id="simSpeed" type="number" value="50" style="width:80px"/></div>
+              <div>Wait at stops (s): <input id="stopWait" type="number" value="30" style="width:80px"/></div>
+            </div>
+          </div>
+
+
+          <div class="card" style="margin-top:12px">
+            <h4>Saved</h4>
+            <div class="saved-list" id="savedList"></div>
+            <div style="display:flex;gap:8px;margin-top:8px">
+              <button class="btn" id="exportBtn">Export</button>
+              <button class="btn" id="clearSavedBtn">Clear</button>
+            </div>
+          </div>
+        </div>
+
+      </aside>
+    </div>
+
+    <footer>
+      <small>Tip: Tap the map to go fullscreen, double-tap to exit.</small>
+    </footer>
+
+
+    <div class="overlay" id="overlay"></div>
+    <div class="side" id="sideMenu">
+      <h3>Menu</h3>
+      <div class="section">
+        <div style="display:flex;gap:8px;align-items:center">
+          <button class="btn" id="menuFind"><i class="fa fa-search"></i> Find</button>
+          <button class="btn" id="menuDisplay"><i class="fa fa-map"></i> Display</button>
+          <button class="btn" id="menuSave"><i class="fa fa-floppy-disk"></i> Save</button>
+        </div>
+      </div>
+
+      <div class="section">
+        <h4>Map Layers</h4>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <label><input type="radio" name="base" value="osm" checked/> OpenStreetMap</label>
+
+          <label><input type="radio" name="base" value="topo" /> OpenTopoMap</label>
+          <label><input type="radio" name="base" value="sat" /> Satellite (ESRI)</label>
+          <label><input type="radio" name="base" value="terrain" /> Stamen Terrain</label>
+        </div>
+      </div>
+
+      <div class="section">
+        <h4>Options</h4>
+        <label><input type="checkbox" id="toggleContours" /> Show contours/hillshade layer</label>
+        <label><input type="checkbox" id="toggleSimulator" /> Show simulator controls</label>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+
+    // ---------- Data (structured from user supplied data) ----------
+    // Convert bus lists into arrays for easier indexing
+    const busData = {
+      "BLG-Welioya-Hambegamuwa": {
+        distance: 39,
+        down: [
+          {departure: 'Balangoda', depTime: '06:00', destination:'Welioya', endTime:'07:30', service:'SLTB'},
+          {departure: 'Balangoda', depTime: '07:30', destination:'Welioya', endTime:'09:00', service:'SLTB'},
+          {departure: 'Balangoda', depTime: '08:30', destination:'Welioya', endTime:'10:00', service:'PRIVATE'},
+          {departure: 'Balangoda', depTime: '09:00', destination:'Welioya', endTime:'10:30', service:'SLTB'},
+          {departure: 'Balangoda', depTime: '09:30', destination:'Welioya', endTime:'11:00', service:'PRIVATE'},
+          {departure: 'Balangoda', depTime: '10:20', destination:'Welioya', endTime:'11:50', service:'SLTB'},
+          {departure: 'Balangoda', depTime: '11:40', destination:'Welioya', endTime:'13:10', service:'PRIVATE'},
+          {departure: 'Balangoda', depTime: '12:30', destination:'Welioya', endTime:'14:00', service:'PRIVATE'},
+          {departure: 'Balangoda', depTime: '13:30', destination:'Welioya', endTime:'15:00', service:'SLTB'},
+          {departure: 'Balangoda', depTime: '15:00', destination:'Hambegamuwa', endTime:'16:50', service:'SLTB'}
+        ],
+        up: [
+          {departure:'Welioya', depTime:'06:00', destination:'Balangoda', endTime:'07:30', service:'SLTB'},
+          {departure:'Welioya', depTime:'07:30', destination:'Balangoda', endTime:'09:00', service:'SLTB'},
+          {departure:'Welioya', depTime:'08:30', destination:'Balangoda', endTime:'10:00', service:'PRIVATE'},
+          {departure:'Welioya', depTime:'09:00', destination:'Balangoda', endTime:'10:30', service:'SLTB'},
+          {departure:'Welioya', depTime:'09:30', destination:'Balangoda', endTime:'11:00', service:'PRIVATE'},
+          {departure:'Welioya', depTime:'10:20', destination:'Balangoda', endTime:'11:50', service:'SLTB'},
+          {departure:'Welioya', depTime:'11:40', destination:'Balangoda', endTime:'13:10', service:'PRIVATE'},
+          {departure:'Welioya', depTime:'12:30', destination:'Balangoda', endTime:'14:00', service:'PRIVATE'},
+          {departure:'Welioya', depTime:'13:30', destination:'Balangoda', endTime:'15:00', service:'SLTB'},
+          {departure:'Hambegamuwa', depTime:'15:00', destination:'Balangoda', endTime:'16:50', service:'SLTB'}
+        ]
+
+      },
+      "BLG-Welipatayaya-Kaltota": {
+        distance: 39,
+        down: [
+          /* similar pattern, trimmed for brevity - replicate a few items */
+          {departure:'Balangoda', depTime:'06:00', destination:'kaltota', endTime:'07:30', service:'SLTB'},
+          {departure:'Balangoda', depTime:'07:30', destination:'kaltota', endTime:'09:00', service:'SLTB'},
+          {departure:'Balangoda', depTime:'08:30', destination:'kaltota', endTime:'10:00', service:'PRIVATE'},
+        ],
+        up: [
+          {departure:'kaltota', depTime:'06:00', destination:'Balangoda', endTime:'07:30', service:'SLTB'},
+          {departure:'kaltota', depTime:'07:30', destination:'Balangoda', endTime:'09:00', service:'SLTB'},
+          {departure:'kaltota', depTime:'08:30', destination:'Balangoda', endTime:'10:00', service:'PRIVATE'},
+        ]
+      },
+      "BLG-Rajavaka-Mulgama": {
+        distance: 17,
+        down: [
+          {departure:'Balangoda', depTime:'06:00', destination:'Mulgama', endTime:'07:30', service:'SLTB'},
+          {departure:'Balangoda', depTime:'07:30', destination:'Mulgama', endTime:'09:00', service:'SLTB'},
+          {departure:'Balangoda', depTime:'08:30', destination:'Mulgama', endTime:'10:00', service:'PRIVATE'},
+        ],
+        up: [
+          {departure:'Mulgama', depTime:'06:00', destination:'Balangoda', endTime:'07:30', service:'SLTB'},
+          {departure:'Mulgama', depTime:'07:30', destination:'Balangoda', endTime:'09:00', service:'SLTB'},
+          {departure:'Mulgama', depTime:'08:30', destination:'Balangoda', endTime:'10:00', service:'PRIVATE'},
+        ]
+      }
+    };
+
+    // Bus stops distances for each route
+    const busStops = {
+      "BLG-Welioya-Hambegamuwa": {
+        Balangoda:0, Kirimatitenna:3.5, Depalamulla:8.1, Bowatta:10, Rajavaka:13.5, Nawaneliya:17, Molamure:18.5, Tanjantenna:22.5, "16thPost":25, Kaltota:29, UdaKolaniya:31, Welioya:34, Bogasweva:35.5, Hambegamuwa:38.5
+      },
+      "BLG-Welipatayaya-Kaltota": {
+        Balangoda:0, Kirimatitenna:3.5, Depalamulla:8.1, Bowatta:10, Rajavaka:13.5, Kassapalena:19, Diyavinna:21, Budugala:24, Welipatayaya:26, Pabbata:28, Kaltota:39
+      },
+      "BLG-Rajavaka-Mulgama": {
+
+        Balangoda:0, Kirimatitenna:3.5, Depalamulla:8.1, Bowatta:10, Rajavaka:12.7, Watawala:14.3,Balinduwawa:16, Mulgama:17
+      }
+    };
+
+    // default Balangoda central coords (approx)
+    const balangodaCenter = {lat:6.6610, lng:80.7700};
+
+    // ---------- Helpers ----------
+    function parseTimeToDate(tStr, referenceDate = new Date()){
+      // tStr "HH:MM"
+      const [hh,mm] = tStr.split(':').map(n=>parseInt(n||'0'));
+      const d = new Date(referenceDate);
+      d.setHours(hh, mm, 0, 0);
+      return d;
+    }
+    function formatTime(d){
+      return d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+    }
+    function addSeconds(date, seconds){ return new Date(date.getTime() + seconds*1000); }
+    function hoursToMs(h){ return h*3600*1000; }
+    function kmhToMs(kmh){ return (kmh*1000)/3600; }
+    function haversine(a,b){
+      const R = 6371; // km
+      const toRad = v=>v*Math.PI/180;
+      const dLat = toRad(b.lat-a.lat), dLon = toRad(b.lng-a.lng);
+      const la = toRad(a.lat), lb = toRad(b.lat);
+      const sin1 = Math.sin(dLat/2), sin2 = Math.sin(dLon/2);
+      const c = 2*Math.atan2(Math.sqrt(sin1*sin1 + Math.cos(la)*Math.cos(lb)*sin2*sin2), Math.sqrt(1 - (sin1*sin1 + Math.cos(la)*Math.cos(lb)*sin2*sin2)));
+      return R*c;
+    }
+
+
+    // ---------- UI bindings ----------
+    const hamburger = document.getElementById('hamburger');
+    const sideMenu = document.getElementById('sideMenu');
+    const overlay = document.getElementById('overlay');
+    const appEl = document.getElementById('app');
+
+    hamburger.addEventListener('click', ()=>{ sideMenu.classList.add('show'); overlay.classList.add('show'); });
+    overlay.addEventListener('click', ()=>{ sideMenu.classList.remove('show'); overlay.classList.remove('show'); });
+
+    // populate routes and stop selects
+    const routeSelect = document.getElementById('routeSelect');
+    const directionSelect = document.getElementById('directionSelect');
+
+    const fromSelect = document.getElementById('fromSelect');
+    const toSelect = document.getElementById('toSelect');
+
+    function populateRoutes(){
+      routeSelect.innerHTML = '';
+      Object.keys(busData).forEach(key=>{
+        const opt = document.createElement('option'); opt.value=key; opt.textContent = key.replace(/-/g,' → ');
+        routeSelect.appendChild(opt);
+      });
+      routeSelect.value = Object.keys(busData)[0];
+      updateStops();
+    }
+    function updateStops(){
+      const r = routeSelect.value;
+      fromSelect.innerHTML=''; toSelect.innerHTML='';
+      const stops = Object.keys(busStops[r] || {});
+
+      stops.forEach(s=>{
+        const o1 = document.createElement('option'); o1.value = s; o1.textContent = s;
+        const o2 = o1.cloneNode(true);
+        fromSelect.appendChild(o1); toSelect.appendChild(o2);
+      });
+    }
+    routeSelect.addEventListener('change', updateStops);
+    directionSelect.addEventListener('change', ()=>{}); // for future use
+
+    populateRoutes();
+
+    // ---------- Leaflet Map ----------
+    const map = L.map('map', {zoomControl:true}).setView([balangodaCenter.lat, balangodaCenter.lng], 12);
+
+    const baseOSM = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'OSM'});
+    const baseTopo = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',{maxZoom:17,attribution:'OpenTopoMap'});
+    const baseSat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,attribution:'Esri'});
+    const baseTerrain = L.tileLayer('https://stamen-tiles-{s}.a.ssl.fastly.net/terrain/{z}/{x}/{y}.jpg',{subdomains:'abcd',attribution:'Stamen'});
+
+    const contours = L.tileLayer('https://tiles.wmflabs.org/hillshading/{z}/{x}/{y}.png',{maxZoom:15,opacity:0.5,attribution:'Hillshade'});
+
+    baseOSM.addTo(map);
+    const baseLayers = { "OpenStreetMap": baseOSM, "OpenTopoMap": baseTopo, "Satellite": baseSat, "Terrain": baseTerrain };
+    const overlayLayers = { "Contours": contours };
+
+    L.control.layers(baseLayers, overlayLayers, {collapsed:true}).addTo(map);
+
+    // markers
+    let fromMarker = null, toMarker = null;
+    const fromBtn = document.getElementById('setFromBtn');
+    const toBtn = document.getElementById('setToBtn');
+    let mapMode = null; // 'from' or 'to'
+
+    function setMapMode(mode){
+      mapMode = mode;
+      document.querySelectorAll('.map-buttons button').forEach(b=>b.classList.remove('active'));
+      if(mode==='from') fromBtn.classList.add('active');
+      if(mode==='to') toBtn.classList.add('active');
+    }
+
+    fromBtn.addEventListener('click', ()=> setMapMode('from'));
+
+    toBtn.addEventListener('click', ()=> setMapMode('to'));
+    document.getElementById('centerBtn').addEventListener('click', ()=> map.setView([balangodaCenter.lat, balangodaCenter.lng], 12));
+
+    map.on('click', function(e){
+      if(mapMode==='from'){
+        if(fromMarker) map.removeLayer(fromMarker);
+        fromMarker = L.marker(e.latlng, {draggable:true}).addTo(map).bindPopup('From').openPopup();
+        // Reverse geocode not included - we store coordinates and distance to Balangoda
+        const dist = haversine({lat:e.latlng.lat,lng:e.latlng.lng}, balangodaCenter).toFixed(2);
+        // add option to fromSelect as custom if not exists
+        const val = `CUSTOM_FROM_${Date.now()}`;
+        const opt = document.createElement('option'); opt.value = val; opt.textContent = `From (custom) ${dist}km`;
+        opt.dataset.lat = e.latlng.lat; opt.dataset.lng = e.latlng.lng; opt.dataset.dist = dist;
+        fromSelect.appendChild(opt);
+        fromSelect.value = val;
+      } else if(mapMode==='to'){
+        if(toMarker) map.removeLayer(toMarker);
+        toMarker = L.marker(e.latlng, {draggable:true}).addTo(map).bindPopup('To').openPopup();
+        const dist = haversine({lat:e.latlng.lat,lng:e.latlng.lng}, balangodaCenter).toFixed(2);
+        const val = `CUSTOM_TO_${Date.now()}`;
+        const opt = document.createElement('option'); opt.value = val; opt.textContent = `To (custom) ${dist}km`;
+        opt.dataset.lat = e.latlng.lat; opt.dataset.lng = e.latlng.lng; opt.dataset.dist = dist;
+        toSelect.appendChild(opt);
+        toSelect.value = val;
+      }
+      // after one click, exit mapMode
+      setMapMode(null);
+    });
+
+    // ---------- Fullscreen single tap / double-tap ----------
+    let lastTap = 0, tapTimeout = null;
+    map.getContainer().addEventListener('click', (ev)=>{
+      const now = Date.now();
+      if(now - lastTap < 350){
+        // double tap
+        clearTimeout(tapTimeout);
+        exitFullScreen();
+        lastTap = 0;
+      } else {
+        lastTap = now;
+
+        tapTimeout = setTimeout(()=>{ enterFullScreen(); }, 300);
+      }
+    });
+    function enterFullScreen(){
+      appEl.classList.add('fullscreen');
+      setTimeout(()=>{ map.invalidateSize(); }, 350);
+    }
+    function exitFullScreen(){
+      appEl.classList.remove('fullscreen');
+      setTimeout(()=>{ map.invalidateSize(); }, 350);
+    }
+
+    // ---------- Find coming bus algorithm ----------
+    const speedDefault = 24; // km/h
+    const waitingSecDefault = 30;
+
+    function findDirection(routeKey, fromName, toName){
+      // route stops distances
+      const stops = busStops[routeKey];
+      if(!stops) return null;
+
+      const stopKeys = Object.keys(stops);
+      // find distances or if custom pick lat/lng estimation -> use distance to balangoda approx
+      const fromDistance = (fromName.startsWith('CUSTOM_FROM_') && document.querySelector(`#fromSelect option[value="${fromName}"]`)?.dataset.dist) ? parseFloat(document.querySelector(`#fromSelect option[value="${fromName}"]`).dataset.dist) : stops[fromName];
+      const toDistance = (toName.startsWith('CUSTOM_TO_') && document.querySelector(`#toSelect option[value="${toName}"]`)?.dataset.dist) ? parseFloat(document.querySelector(`#toSelect option[value="${toName}"]`).dataset.dist) : stops[toName];
+      if(fromDistance == null || toDistance == null) {
+        // fallback: if either missing choose direction down
+        return {direction:'down', from: fromDistance || 0, to: toDistance || 0, routeKey};
+      }
+      if(fromDistance > toDistance){
+        // up direction (reverse)
+        const routeDistance = busData[routeKey].distance;
+        return {direction:'up', from: routeDistance - fromDistance, to: routeDistance - toDistance, routeKey};
+      } else {
+        return {direction:'down', from: fromDistance, to: toDistance, routeKey};
+      }
+    }
+
+    function getBusArrivalAtDistance(bus, routeDistance, targetDistance, speedKmh = speedDefault, waitSec = waitingSecDefault){
+      // Approach: compute travel time proportional to distance using average speed
+      const dep = parseTimeToDate(bus.depTime);
+      const travelHours = (targetDistance / speedKmh);
+      const travelMs = travelHours * 3600 * 1000;
+      // add wait seconds for intermediate stops estimation (approx number of stops = targetDistance / 2 km? We'll estimate wait time proportional)
+      const approxStopsCount = Math.max(0, Math.round(targetDistance / 3));
+      const waitMs = approxStopsCount * waitSec * 1000;
+      return new Date(dep.getTime() + travelMs + waitMs);
+    }
+
+    function comingBus(routeKey, dir, fromDist, toDist, chosenTime=null){
+      const route = busData[routeKey];
+      if(!route) return null;
+      const buses = route[dir];
+      if(!buses || buses.length===0) return null;
+      const routeDistance = route.distance;
+
+      const now = new Date();
+      const compareTime = chosenTime ? chosenTime : now;
+
+      // compute arrival times at 'fromDist' for each bus
+      const arrivals = buses.map((b, idx)=>{
+        // determine effective route distance: bus trip may have depTime and endTime; compute estimated duration from dep to end
+        const dep = parseTimeToDate(b.depTime);
+        const end = parseTimeToDate(b.endTime);
+        // if end < dep then assume next day -> add 24h
+        if(end <= dep) end.setDate(end.getDate()+1);
+        const tripMs = end - dep;
+        // compute arrival by proportion of distance (simple linear proportion)
+        const proportion = fromDist / routeDistance;
+
+        const arrival = new Date(dep.getTime() + proportion * tripMs);
+        return {index: idx, bus: b, arrival};
+      });
+
+      // find first arrival >= compareTime
+      arrivals.sort((a,b)=>a.arrival - b.arrival);
+      let foundIndex = arrivals.findIndex(a=>a.arrival >= compareTime);
+      if(foundIndex === -1){
+        // no future bus found — choose last as "closest" (wrap)
+        foundIndex = arrivals.length - 1;
+      }
+      const prev = arrivals[Math.max(0, foundIndex-1)];
+      const curr = arrivals[foundIndex];
+      const next = arrivals[Math.min(arrivals.length-1, foundIndex+1)];
+      return {prev, curr, next, arrivals};
+    }
+
+    // ---------- Wiring find button and UI results ----------
+    const findBtn = document.getElementById('findBtn');
+    const resultTitle = document.getElementById('resultTitle');
+    const resultTime = document.getElementById('resultTime');
+    const resultSub = document.getElementById('resultSub');
+    const otherDetails = document.getElementById('otherDetails');
+    const servicePill = document.getElementById('servicePill');
+    let currentResult = null;
+
+    findBtn.addEventListener('click', ()=> doFind());
+
+    function doFind(which='curr'){
+      const routeKey = routeSelect.value;
+      const fromVal = fromSelect.value;
+      const toVal = toSelect.value;
+
+      if(!fromVal || !toVal){ alert('Please select from and to'); return; }
+
+      // compute distances
+      let fromDist, toDist;
+      if(fromVal.startsWith('CUSTOM_FROM_')){
+        fromDist = parseFloat(document.querySelector(`#fromSelect option[value="${fromVal}"]`).dataset.dist);
+      } else fromDist = busStops[routeKey][fromVal];
+
+      if(toVal.startsWith('CUSTOM_TO_')){
+        toDist = parseFloat(document.querySelector(`#toSelect option[value="${toVal}"]`).dataset.dist);
+      } else toDist = busStops[routeKey][toVal];
+
+      const dirObj = findDirection(routeKey, fromVal, toVal);
+      const dir = dirObj.direction;
+      // parse time or null
+      const timeInput = document.getElementById('timeInput').value;
+
+      const chosenDate = timeInput ? parseTimeToDate(timeInput) : null;
+      const res = comingBus(routeKey, dir, dirObj.from, dirObj.to, chosenDate);
+      if(!res || !res.curr){
+        resultTitle.textContent = 'No buses';
+        resultTime.textContent = '--:--';
+        resultSub.textContent = 'No buses found for this route/direction';
+        otherDetails.textContent = '';
+        servicePill.style.display='none';
+        return toDist;
+      }
+      currentResult = {routeKey, dir, fromVal, toVal, chosenDate, res};
+      renderResultCard(currentResult, which);
+    }
+
+    function renderResultCard(state, which='curr'){
+      const item = state.res[which] || state.res.curr;
+      if(!item) return;
+
+      const b = item.bus;
+      resultTitle.textContent = `${b.departure} → ${b.destination}`;
+      resultTime.textContent = formatTime(item.arrival);
+      resultSub.innerHTML = `<div><strong>&nbsp JOURNEY:</strong></div><div><strong>Start: </strong>${fromSelect.value} at: ${formatTime(item.arrival)}</strong></div>
+       <div><strong>Finish:</strong> ${toSelect.value} at: ${' '}</div>`;
+      // service pill
+      servicePill.style.display='block';
+      servicePill.textContent = b.service;
+      servicePill.className = 'service-pill ' + (b.service.toLowerCase().includes('private') ? 'private' : 'sltb');
+      // other details
+      const dep = parseTimeToDate(b.depTime);
+      const end = parseTimeToDate(b.endTime);
+      otherDetails.innerHTML = `<div><strong>&nbsp BUS:</strong></div><div><strong>Departure:</strong> ${b.departure} at ${formatTime(dep)}</div>
+      <div><strong>Destination:</strong> ${b.destination} at ${formatTime(end)}</div>
+      <div><strong>Route:</strong> ${state.routeKey}</div><div><strong>Distance (route):</strong> ${busData[state.routeKey].distance} km</div>`;
+
+      // highlight bus on simulator if available
+    }
+
+    document.getElementById('prevBusBtn').addEventListener('click', ()=>{
+      if(!currentResult) return;
+      // show prev if exists
+      if(currentResult.res.prev) renderResultCard(currentResult, 'prev');
+      else alert('No previous bus');
+    });
+    document.getElementById('nextBusBtn').addEventListener('click', ()=>{
+      if(!currentResult) return;
+      if(currentResult.res.next) renderResultCard(currentResult, 'next');
+      else alert('No next bus');
+    });
+
+    document.getElementById('clearBtn').addEventListener('click', ()=>{
+      fromSelect.selectedIndex = 0; toSelect.selectedIndex = 0; document.getElementById('timeInput').value='';
+      resultTitle.textContent='No result yet'; resultTime.textContent='--:--'; resultSub.textContent='Select route, from, to and time then click Find'; servicePill.style.display='none'; otherDetails.textContent='';
+    });
+
+    // ---------- Local storage saving ----------
+    function saveLocation(name, lat, lng){
+      const saved = JSON.parse(localStorage.getItem('saved') || '[]');
+      saved.push({name, lat, lng, ts:Date.now()});
+      localStorage.setItem('saved', JSON.stringify(saved));
+
+      renderSaved();
+    }
+    function renderSaved(){
+      const saved = JSON.parse(localStorage.getItem('saved') || '[]');
+      const el = document.getElementById('savedList'); el.innerHTML='';
+      saved.forEach((s, idx)=>{
+        const div = document.createElement('div'); div.className='saved-item';
+        const left = document.createElement('div'); left.innerHTML = `<strong>${s.name}</strong><div style="font-size:.85rem;color:var(--muted)">${s.lat.toFixed(5)}, ${s.lng.toFixed(5)}</div>`;
+        const right = document.createElement('div');
+        const goBtn = document.createElement('button'); goBtn.className='btn small'; goBtn.textContent='Go'; goBtn.addEventListener('click', ()=> map.setView([s.lat,s.lng],14));
+        const delBtn = document.createElement('button'); delBtn.className='btn small'; delBtn.textContent='Del'; delBtn.addEventListener('click', ()=>{
+          const arr = JSON.parse(localStorage.getItem('saved')||'[]'); arr.splice(idx,1); localStorage.setItem('saved', JSON.stringify(arr)); renderSaved();
+        });
+        right.appendChild(goBtn); right.appendChild(delBtn);
+        div.appendChild(left); div.appendChild(right); el.appendChild(div);
+      });
+    }
+    renderSaved();
+
+    document.getElementById('saveLocBtn').addEventListener('click', ()=>{
+      if(fromMarker){
+        saveLocation('From', fromMarker.getLatLng().lat, fromMarker.getLatLng().lng);
+      }
+      if(toMarker){
+        saveLocation('To', toMarker.getLatLng().lat, toMarker.getLatLng().lng);
+      }
+    });
+
+    document.getElementById('exportBtn').addEventListener('click', ()=>{
+      const saved = localStorage.getItem('saved') || '[]';
+      const blob = new Blob([saved], {type:'application/json'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = 'saved-locations.json'; a.click(); URL.revokeObjectURL(url);
+    });
+    document.getElementById('clearSavedBtn').addEventListener('click', ()=>{ localStorage.removeItem('saved'); renderSaved(); });
+
+    // ---------- GPX loading & Simulator ----------
+    let simPolyline = null, simMarker = null, simCoords = [], simTimer = null, simIndex=0;
+    const gpxInput = document.getElementById('gpxFile'), loadGpxBtn = document.getElementById('loadGpxBtn');
+    const startSimBtn = document.getElementById('startSimBtn'), stopSimBtn = document.getElementById('stopSimBtn');
+
+    loadGpxBtn.addEventListener('click', ()=> gpxInput.click());
+    gpxInput.addEventListener('change', handleGpxFile);
+
+    function handleGpxFile(e){
+      const f = e.target.files[0]; if(!f) return;
+      const reader = new FileReader();
+      reader.onload = function(){
+        const txt = reader.result;
+        // parse GPX: extract <trkpt lat lon> points
+        const parser = new DOMParser();
+        const xml = parser.parseFromString(txt,'application/xml');
+        const pts = Array.from(xml.querySelectorAll('trkpt'));
+        if(pts.length===0) { alert('No track points found in GPX'); return;}
+        simCoords = pts.map(p=>[parseFloat(p.getAttribute('lat')), parseFloat(p.getAttribute('lon'))]);
+        if(simPolyline) map.removeLayer(simPolyline);
+        simPolyline = L.polyline(simCoords, {color:'#ff6b6b'}).addTo(map);
+        map.fitBounds(simPolyline.getBounds(), {padding:[40,40]});
+        // save to localStorage
+        const stored = JSON.parse(localStorage.getItem('gpxTracks')||'[]'); stored.push({name:f.name, coords: simCoords}); localStorage.setItem('gpxTracks', JSON.stringify(stored));
+        renderSaved();
+      };
+      reader.readAsText(f);
+    }
+
+    startSimBtn.addEventListener('click', ()=> {
+      if(!simCoords || simCoords.length<2){ alert('Load a GPX track first'); return; }
+      if(simMarker) map.removeLayer(simMarker);
+      simIndex = 0;
+      simMarker = L.marker(simCoords[0], {icon: L.divIcon({html:'<img src="bus simulator.png">', className:'bus-sim-icon', iconSize:[20,20]})}).addTo(map);
+
+      runSimulator();
+    });
+    stopSimBtn.addEventListener('click', stopSimulator);
+
+    function runSimulator(){
+      const speed = parseFloat(document.getElementById('simSpeed').value) || speedDefault;
+      if(simIndex >= simCoords.length-1){ stopSimulator(); return; }
+      const a = {lat: simCoords[simIndex][0], lng: simCoords[simIndex][1]};
+      const b = {lat: simCoords[simIndex+1][0], lng: simCoords[simIndex+1][1]};
+      const segKm = haversine(a,b);
+      const segMs = (segKm / speed) * 3600*1000;
+      const steps = Math.max(8, Math.floor(segMs/200)); // small steps
+      let step = 0;
+      const latStep = (b.lat - a.lat)/steps, lngStep = (b.lng - a.lng)/steps;
+      simTimer = setInterval(()=>{
+
+        step++;
+        const newLat = a.lat + latStep*step, newLng = a.lng + lngStep*step;
+        simMarker.setLatLng([newLat,newLng]);
+        if(step >= steps){
+          clearInterval(simTimer);
+          simIndex++;
+          runSimulator();
+        }
+      }, Math.max(80, segMs/steps));
+    }
+    function stopSimulator(){
+      if(simTimer) clearInterval(simTimer);
+      simTimer = null;
+    }
+
+    // ---------- Menu controls for layers ----------------
+    document.querySelectorAll('input[name="base"]').forEach(r=>{
+      r.addEventListener('change',(ev)=>{
+        const val = ev.target.value;
+        // remove existing and add chosen
+        map.eachLayer(layer => {});
+
+        if(val==='osm'){ baseOSM.addTo(map); }
+        else if(val==='topo'){ baseTopo.addTo(map); }
+        else if(val==='sat'){ baseSat.addTo(map); }
+        else if(val==='terrain'){ baseTerrain.addTo(map); }
+      });
+    });
+    document.getElementById('toggleContours').addEventListener('change', (e)=>{
+      if(e.target.checked) contours.addTo(map);
+      else map.removeLayer(contours);
+    });
+
+    // ---------- On load, center and finish ----------
+    map.setView([balangodaCenter.lat, balangodaCenter.lng], 12);
+
+    // Set initial sample from & to
+    setTimeout(()=>{ fromSelect.selectedIndex=0; toSelect.selectedIndex = Math.min(2, toSelect.options.length-1); }, 300);
+
+    // disable default double click zoom to avoid interfering with custom double-tap
+    map.doubleClickZoom.disable();
+
+    // small CSS for bus sim icon
+    const style = document.createElement('style');
+    style.innerHTML = `.bus-sim-icon{background:var(--accent);color:white;padding:6px;border-radius:8px;font-size:14px;box-shadow:0 6px 16px rgba(2,6,23,.6)}`;
+    document.head.appendChild(style);
+
+    // Render saved on start
+    renderSaved();
+
+    // Optional: handle keyboard Esc to close menus or exit fullscreen
+    document.addEventListener('keydown', (e)=>{ if(e.key==='Escape'){ sideMenu.classList.remove('show'); overlay.classList.remove('show'); exitFullScreen(); } });
+
+    // PWA Installation Prompt Handling
+    let deferredPrompt;
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      deferredPrompt = e;
+      console.log('App is installable');
+    });
+
+    // End of script
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js')
+          .then(reg => console.log('Service Worker Registered', reg))
+          .catch(err => console.log('Registration Failed', err));
+      });
+    }
+  </script>
+</body>
+</html>
