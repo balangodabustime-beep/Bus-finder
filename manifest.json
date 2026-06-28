@@ -1,6 +1,6 @@
 {
-  "name": "Bus Time - Balangoda Bus Finder",
-  "short_name": "Bus Time",
+  "name": "Bus service Balangoda",
+  "short_name": "Bus Service",
   "description": "Offline Bus Schedule & Route Finder for Balangoda with real-time tracking",
   "start_url": "./index.html",
   "scope": "./",
